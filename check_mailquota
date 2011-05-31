@@ -1,0 +1,68 @@
+#!/usr/bin/perl
+
+=head1 NAME
+
+check_mailquota
+
+=head1 DESCRIPTION
+
+This plugin denies all mails if user is over quota.
+
+=head1 AUTHOR
+
+Jorge Giunta <jorge@giunta.com.ar>
+http://www.giunta.com.ar
+
+This plugin is free software; you can distribute it and/or modify it
+under the terms of the General Public License v3.
+
+=cut
+
+my $VERSION = 0.01;
+my $MAXQUOTA = '98'; # Maximum percent available
+my $VUSERINFO = '/var/lib/vpopmail/bin/vuserinfo';
+my $SUDO = '/usr/bin/sudo'; # add qpsmtpd to sudo with visudo and put "qpsmtpd ALL=NOPASSWD:/var/lib/vpopmail/bin/vuserinfo"
+
+sub register {
+  my ($self, $qp, %arg) = @_;
+  $self->register_hook("rcpt", "check_mailquota");
+  $self->{_extn} = $arg{extn} if $arg{extn};
+  $self->{_deny_note} = $arg{deny_note} if $arg{deny_note};
+}
+
+sub check_mailquota {
+  my ($self, $transaction, $recipient) = @_;
+  return (DECLINED) if $self->qp->connection->relay_client;
+  $self->log(LOGINFO, "stripping '$self->{_extn}' extensions") if $self->{_extn};
+
+  my $host = lc $recipient->host;
+  my $user = lc $recipient->user;
+
+  return (DECLINED) unless $host && $user;
+
+  my $address = $user . '@' . $host if $host && $user;
+  $self->log(LOGDEBUG, "MAILQUOTA adress --> $address");
+
+  my @available_quota = `$SUDO $VUSERINFO -Q $address`;
+  my $quota = $available_quota[0];
+
+  $self->log(LOGDEBUG, "MAILQUOTA available_quota --> $quota");
+
+  if ($quota == "NOQUOTA") {
+  	$quota = chop($quota);
+  	$self->log(LOGDEBUG, "MAILQUOTA $address it's quota available because don't have quota set.");
+  }
+
+  if (($quota < $MAXQUOTA . '%') && ($quota != "NOQUOTA")) {
+  	$self->log(LOGDEBUG, "MAILQUOTA $address it's quota available");
+  }
+
+  if ($quota > $MAXQUOTA - 1 . '%') {  
+	$self->log(LOGDEBUG, "MAILQUOTA $address it's over quota");
+	$self->log(LOGINFO, "$address it's over quota");
+	return (DENY, "$address it's over quota");
+  }
+
+return (DECLINED);
+}
+

@@ -1,1 +1,6 @@
 qpsmtpd-vpopmail-quotacheck
+
+To install, copy on your plugins dir and enable it on /etc/qpsmtpd/plugins.
+
+Enjoy it!
+
